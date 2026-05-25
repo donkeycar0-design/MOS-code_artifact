@@ -97,6 +97,23 @@
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
 
+    /* =========================================================================
+       ⚙️  여기에 본인 Firebase 프로젝트 설정을 붙여넣으세요.
+       Firebase 콘솔 → 프로젝트 설정 → "내 앱" → 웹 앱(</>)의 firebaseConfig 값.
+       (외부에서 __firebase_config 전역이 주입되는 환경에서는 그쪽이 자동 우선됩니다.)
+       ========================================================================= */
+    const MY_FIREBASE_CONFIG = {
+      apiKey:            "AIzaSyAIGYteSme7ACk7OONE2kdiiyycQQKdHzU",
+      authDomain:        "morse-transceiver.firebaseapp.com",
+      projectId:         "morse-transceiver",
+      storageBucket:     "morse-transceiver.firebasestorage.app",
+      messagingSenderId: "792260345692",
+      appId:             "1:792260345692:web:1267c8caa9a7b57c7ccb99",
+      measurementId:     "G-6L694144Y9"
+    };
+    const FIREBASE_CONFIG_FILLED =
+      MY_FIREBASE_CONFIG.projectId && !MY_FIREBASE_CONFIG.projectId.startsWith("여기에");
+
     // --- HANGUL JAMO MAPS ---
     const CHOSUNG = ['ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'];
     const JUNGSUNG = ['ㅏ', 'ㅐ', 'ㅑ', 'ㅒ', 'ㅓ', 'ㅔ', 'ㅕ', 'ㅖ', 'ㅗ', 'ㅘ', 'ㅙ', 'ㅚ', '요', 'ㅜ', 'ㅝ', 'ㅞ', 'ㅟ', 'ㅠ', 'ㅡ', 'ㅢ', 'ㅣ'];
@@ -148,7 +165,7 @@
           
           if (cho === 'ㄱ') result.push('ㄱ');
           else if (cho === 'ㄲ') result.push('ㄱ', 'ㄱ');
-          else if (cho === 'ㄷㄷ') result.push('ㄷ', 'ㄷ'); 
+          else if (cho === 'ㄸ') result.push('ㄷ', 'ㄷ'); 
           else if (cho === 'ㅃ') result.push('ㅂ', 'ㅂ');
           else if (cho === 'ㅆ') result.push('ㅅ', 'ㅅ');
           else if (cho === 'ㅉ') result.push('ㅈ', 'ㅈ');
@@ -168,15 +185,15 @@
           if (jong !== '') {
             if (jong === 'ㄲ') result.push('ㄱ', 'ㄱ');
             else if (jong === 'ㄳ') result.push('ㄱ', 'ㅅ');
-            else if (jong === 'ㄴㅈ') result.push('ㄴ', 'ㅈ');
+            else if (jong === 'ㄵ') result.push('ㄴ', 'ㅈ');
             else if (jong === 'ㄶ') result.push('ㄴ', 'ㅎ');
-            else if (jong === 'ㄹㄱ') result.push('ㄹ', 'ㄱ');
-            else if (jong === 'ㄹㅁ') result.push('ㄹ', 'ㅁ');
-            else if (jong === 'ㄹㅂ') result.push('ㄹ', 'ㅂ');
-            else if (jong === 'ㄹㅅ') result.push('ㄹ', 'ㅅ');
-            else if (jong === 'ㄹㅌ') result.push('ㄹ', 'ㅌ');
-            else if (jong === 'ㄹㅍ') result.push('ㄹ', 'ㅍ');
-            else if (jong === 'ㄹㅎ') result.push('ㄹ', 'ㅎ');
+            else if (jong === 'ㄺ') result.push('ㄹ', 'ㄱ');
+            else if (jong === 'ㄻ') result.push('ㄹ', 'ㅁ');
+            else if (jong === 'ㄼ') result.push('ㄹ', 'ㅂ');
+            else if (jong === 'ㄽ') result.push('ㄹ', 'ㅅ');
+            else if (jong === 'ㄾ') result.push('ㄹ', 'ㅌ');
+            else if (jong === 'ㄿ') result.push('ㄹ', 'ㅍ');
+            else if (jong === 'ㅀ') result.push('ㄹ', 'ㅎ');
             else if (jong === 'ㅄ') result.push('ㅂ', 'ㅅ');
             else if (jong === 'ㅆ') result.push('ㅅ', 'ㅅ');
             else result.push(jong);
@@ -188,8 +205,21 @@
 
     const textToMorse = (text) => {
       if (!text) return '';
-      const words = text.toUpperCase().split(' ');
-      return words.map(word => decomposeHangul(word).map(char => MORSE_MAP[char] || '').filter(Boolean).join(' ')).join(' // ');
+      return text.toUpperCase().split(' ').map(word => {
+        let out = '';
+        let prevSyl = false;
+        for (const ch of word) {
+          const code = ch.charCodeAt(0);
+          const isSyl = code >= 0xAC00 && code <= 0xD7A3;
+          const morse = decomposeHangul(ch).map(j => MORSE_MAP[j] || '').filter(Boolean).join(' ');
+          if (!morse) continue;
+          // 한글 음절끼리는 ' / '로, 그 외(영문/숫자)는 공백으로 구분
+          if (out !== '') out += (isSyl && prevSyl) ? ' / ' : ' ';
+          out += morse;
+          prevSyl = isSyl;
+        }
+        return out;
+      }).join(' // ');
     };
 
     const assembleHangul = (jamos) => {
@@ -217,7 +247,7 @@
         jong = jamos[i]; i++;
         if (i < jamos.length && JONGSUNG.includes(jamos[i])) {
           const combined = jong + jamos[i];
-          const compounds = { 'ㄱㄱ': 'ㄲ', 'ㄱㅅ': 'ㄳ', 'ㄴㅈ': 'ㄴㅈ', 'ㄴㅎ': 'ㄶ', 'ㄹㄱ': 'ㄹㄱ', 'ㄹㅁ': 'ㄹㅁ', 'ㄹㅂ': 'ㄹㅂ', 'ㄹㅅ': 'ㄹㅅ', 'ㄹㅌ': 'ㄹㅌ', 'ㄹㅍ': 'ㄹㅍ', 'ㄹㅎ': 'ㄹㅎ', 'ㅂㅅ': 'ㅂㅅ', 'ㅅㅅ': 'ㅆ' };
+          const compounds = { 'ㄱㄱ': 'ㄲ', 'ㄱㅅ': 'ㄳ', 'ㄴㅈ': 'ㄵ', 'ㄴㅎ': 'ㄶ', 'ㄹㄱ': 'ㄺ', 'ㄹㅁ': 'ㄻ', 'ㄹㅂ': 'ㄼ', 'ㄹㅅ': 'ㄽ', 'ㄹㅌ': 'ㄾ', 'ㄹㅍ': 'ㄿ', 'ㄹㅎ': 'ㅀ', 'ㅂㅅ': 'ㅄ', 'ㅅㅅ': 'ㅆ' };
           if (compounds[combined]) { jong = compounds[combined]; i++; }
         }
       }
@@ -313,28 +343,59 @@
       };
 
       useEffect(() => {
-        if (typeof __firebase_config !== 'undefined' && window.Firebase) {
+        let cancelled = false;
+
+        const startFirebase = () => {
+          // 1순위: 외부 주입 전역(__firebase_config), 2순위: 위 MY_FIREBASE_CONFIG
+          let firebaseConfig = null;
+          if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+            try { firebaseConfig = JSON.parse(__firebase_config); } catch (e) {}
+          }
+          if (!firebaseConfig && FIREBASE_CONFIG_FILLED) {
+            firebaseConfig = MY_FIREBASE_CONFIG;
+          }
+
+          if (!firebaseConfig) {
+            showToast("⚙️ 코드 상단 MY_FIREBASE_CONFIG를 채워야 서버 연결됩니다");
+            return;
+          }
+
           try {
-            const firebaseConfig = JSON.parse(__firebase_config);
             const app = window.Firebase.initializeApp(firebaseConfig);
             const fbAuth = window.Firebase.getAuth(app);
             const fbDb = window.Firebase.getFirestore(app);
             setDb(fbDb);
 
             const authenticate = async () => {
-              if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                await window.Firebase.signInWithCustomToken(fbAuth, __initial_auth_token);
-              } else {
-                await window.Firebase.signInAnonymously(fbAuth);
+              try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                  await window.Firebase.signInWithCustomToken(fbAuth, __initial_auth_token);
+                } else {
+                  await window.Firebase.signInAnonymously(fbAuth);
+                }
+              } catch (authErr) {
+                console.error(authErr);
+                showToast("익명 인증 실패: 콘솔에서 Anonymous 로그인을 켜세요");
               }
             };
             authenticate();
             window.Firebase.onAuthStateChanged(fbAuth, (usr) => setUser(usr));
           } catch (e) {
             console.error(e);
-            showToast("오프라인 가동 모드");
+            showToast("Firebase 초기화 실패: 설정값을 확인하세요");
           }
-        }
+        };
+
+        // Firebase SDK는 상단 ES 모듈이 비동기로 로드하므로, 준비될 때까지 대기(최대 ~6초).
+        const waitForSdk = (tries = 0) => {
+          if (cancelled) return;
+          if (window.Firebase) { startFirebase(); return; }
+          if (tries > 60) { showToast("Firebase SDK 로드 실패 (네트워크 확인)"); return; }
+          setTimeout(() => waitForSdk(tries + 1), 100);
+        };
+        waitForSdk();
+
+        return () => { cancelled = true; };
       }, []);
 
       useEffect(() => {

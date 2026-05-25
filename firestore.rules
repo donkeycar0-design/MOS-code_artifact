@@ -1,0 +1,51 @@
+rules_version = '2';
+
+// =============================================================================
+//  한글 모스 송수신기 — Firestore 보안 규칙
+//  Firebase 콘솔 → Firestore Database → "규칙(Rules)" 탭에 붙여넣고 [게시].
+//  여기서 명시적으로 허용하지 않은 모든 경로/동작은 기본적으로 거부됩니다.
+// =============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── 전신사 등록 정보 (operators) ───────────────────────────────────────
+    match /artifacts/{appId}/public/data/operators/{callsign} {
+
+      // 로그인 시 클라이언트가 비밀번호를 직접 대조하므로 읽기를 열어 둡니다.
+      //  ⚠️ 한계: 이 구조에서는 로그인한 사람이라면 누구나 모든 전신사 문서를
+      //     읽을 수 있어 "평문 비밀번호"가 노출됩니다. 규칙으로는 특정 필드만
+      //     숨길 수 없습니다. 근본 해결책은 아래 "보안 노트" 참고.
+      allow read: if request.auth != null;
+
+      // 신규 콜사인 "생성"만 허용. 이미 존재하면 거부 → 남이 덮어쓰는 계정 탈취 방지.
+      allow create: if request.auth != null
+        && !exists(/databases/$(database)/documents/artifacts/$(appId)/public/data/operators/$(callsign))
+        && request.resource.data.callsign is string
+        && request.resource.data.password is string
+        && request.resource.data.password.size() > 0;
+
+      // 등록된 면허는 수정/삭제 불가.
+      allow update, delete: if false;
+    }
+
+    // ── 모스 전보 메시지 (morse_messages) ─────────────────────────────────
+    match /artifacts/{appId}/public/data/morse_messages/{messageId} {
+
+      // 로그인한 사용자는 읽기 가능. (현재 클라이언트는 전체를 받아 화면에서만
+      //  필터링하므로, private 전보도 로그인 사용자에겐 읽힙니다 — 보안 노트 참고.)
+      allow read: if request.auth != null;
+
+      // 전송: 필드 형식과 종류를 검증.
+      allow create: if request.auth != null
+        && request.resource.data.sender is string
+        && request.resource.data.text   is string
+        && request.resource.data.morse  is string
+        && request.resource.data.morse.size() < 5000
+        && request.resource.data.type in ['broadcast', 'private'];
+
+      // 한번 송출된 전파는 수정/삭제 불가 (전신 기록 보존).
+      allow update, delete: if false;
+    }
+  }
+}
