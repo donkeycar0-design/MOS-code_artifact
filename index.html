@@ -1,0 +1,1294 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>한글 모오스 송수신기 - 프로 오퍼레이터</title>
+  <!-- React and ReactDOM -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <!-- Babel for JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Vintage fonts for mechanical radio theme -->
+  <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Share+Tech+Mono&family=Noto+Sans+KR:wght@300;500;800&display=swap" rel="stylesheet">
+  
+  <style>
+    body {
+      font-family: 'Noto Sans KR', sans-serif;
+      background-color: #0c0d0e;
+      background-image: radial-gradient(circle at center, #2c313a 0%, #08090a 100%);
+    }
+    .vintage-mono {
+      font-family: 'Courier Prime', 'Share Tech Mono', monospace;
+    }
+    /* Cast-Iron Steel Gray Chassis (Medium-Light Gray for better contrast and detail) */
+    .chassis-body {
+      background: linear-gradient(135deg, #5c6470 0%, #3a414b 100%);
+      border: 5px solid #23272e;
+      box-shadow: inset 1px 1px 4px rgba(255, 255, 255, 0.3),
+                  inset -1px -1px 4px rgba(0, 0, 0, 0.7),
+                  0px 30px 70px rgba(0, 0, 0, 0.95);
+    }
+    /* S-Meter Gauge Face with slightly warm glow */
+    .meter-face {
+      background: radial-gradient(circle at center, #fbf7eb 0%, #e8dfc7 100%);
+      box-shadow: inset 0 2px 8px rgba(0,0,0,0.35);
+    }
+    /* CRT Display Panel */
+    .crt-monitor {
+      background-color: #080d0a;
+      box-shadow: inset 0px 4px 15px rgba(0, 0, 0, 0.95),
+                  0 0 12px rgba(245, 158, 11, 0.15);
+      border: 2.5px solid #3c3222;
+    }
+    /* Authentic Telegraph Paper Roll */
+    .paper-ribbon {
+      background: linear-gradient(to bottom, #ebdcb9 0%, #faf5e6 15%, #faf5e6 85%, #ebdcb9 100%);
+      box-shadow: inset 0px 3px 6px rgba(0,0,0,0.45), 0px 5px 15px rgba(0,0,0,0.5);
+      color: #172012;
+    }
+    /* Cast metallic screws */
+    .iron-screw {
+      width: 14px;
+      height: 14px;
+      background: radial-gradient(circle, #9da5b3 0%, #4f555e 100%);
+      border-radius: 50%;
+      border: 1.5px solid #141517;
+      box-shadow: 1px 1px 2px rgba(255, 255, 255, 0.35);
+      position: relative;
+    }
+    .iron-screw::after {
+      content: '';
+      position: absolute;
+      width: 10px;
+      height: 2px;
+      background-color: #141517;
+      top: 4.5px;
+      left: 1px;
+    }
+    /* Mechanical key levers down/up transition */
+    .lever-down {
+      transform: rotate(2deg) translateY(6px);
+      transition: transform 0.02s cubic-bezier(0, 0, 0.1, 1);
+    }
+    .lever-up {
+      transform: rotate(0deg) translateY(0px);
+      transition: transform 0.07s cubic-bezier(0.3, 0, 1, 1);
+    }
+  </style>
+
+  <!-- Firebase Integration -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc, collection, query, onSnapshot, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    
+    window.Firebase = { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, getFirestore, doc, setDoc, getDoc, collection, query, onSnapshot, addDoc, serverTimestamp };
+  </script>
+</head>
+<body class="text-stone-300 min-h-screen py-4 px-3 md:px-6 flex flex-col justify-between">
+
+  <div id="root" class="w-full max-w-2xl mx-auto my-auto"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // --- HANGUL JAMO MAPS ---
+    const CHOSUNG = ['ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'];
+    const JUNGSUNG = ['ㅏ', 'ㅐ', 'ㅑ', 'ㅒ', 'ㅓ', 'ㅔ', 'ㅕ', 'ㅖ', 'ㅗ', 'ㅘ', 'ㅙ', 'ㅚ', '요', 'ㅜ', 'ㅝ', 'ㅞ', 'ㅟ', 'ㅠ', 'ㅡ', 'ㅢ', 'ㅣ'];
+    const JONGSUNG = ['', 'ㄱ', 'ㄲ', 'ㄳ', 'ㄴ', 'ㄵ', 'ㄶ', 'ㄷ', 'ㄹ', 'ㄺ', 'ㄻ', 'ㄼ', 'ㄽ', 'ㄾ', 'ㄿ', 'ㅀ', 'ㅁ', 'ㅂ', 'ㅄ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'];
+
+    const MORSE_MAP = {
+      'ㄱ': '.-..',  'ㄴ': '..-.',  'ㄷ': '-...',  'ㄹ': '...-',  'ㅁ': '--',
+      'ㅂ': '.--',   'ㅅ': '--.',   'ㅇ': '-.-',   'ㅈ': '.--.',  'ㅊ': '-.-.',
+      'ㅋ': '-..-',  'ㅌ': '--..',  'ㅍ': '---',   'ㅎ': '.---',
+      'ㅏ': '.',     'ㅑ': '..',    'ㅓ': '-',     'ㅕ': '...',   'ㅗ': '.-',
+      '요': '-.',    'ㅜ': '....',  'ㅠ': '.-.',   'ㅡ': '-..',   'ㅣ': '..-',
+      'ㅐ': '--.-',  'ㅔ': '-.--',
+      'A': '.-',     'B': '-...',   'C': '-.-.',   'D': '-..',    'E': '.',
+      'F': '..-.',   'G': '--.',    'H': '....',   'I': '..',     'J': '.---',
+      'K': '-.-',    'L': '.-..',   'M': '--',     'N': '-.',     'O': '---',
+      'P': '.--.',   'Q': '--.-',   'R': '.-.',    'S': '...',    'T': '-',
+      'U': '..-',    'V': '...-',   'W': '.--',    'X': '-..-',   'Y': '-.--',
+      'Z': '--..',
+      '1': '.----',  '2': '..---',  '3': '...--',  '4': '....-',  '5': '.....',
+      '6': '-....',  '7': '--...',  '8': '---..',  '9': '----.',  '0': '-----',
+      '?': '..--..', '/': '-..-.',  '-': '-....-', '.': '.-.-.-', ',': '--..--'
+    };
+
+    const REVERSE_KOREAN = Object.entries(MORSE_MAP).reduce((acc, [char, code]) => {
+      if ('ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎㅏㅑㅓㅕㅗ요ㅜㅠㅡㅣㅐㅔ'.includes(char)) { acc[code] = char; }
+      return acc;
+    }, {});
+
+    const REVERSE_ENGLISH = Object.entries(MORSE_MAP).reduce((acc, [char, code]) => {
+      if (!'ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎㅏㅑㅓㅕㅗ요ㅜㅠㅡㅣㅐㅔ'.includes(char)) { acc[code] = char; }
+      return acc;
+    }, {});
+
+    REVERSE_KOREAN['.-..'] = 'ㄱ'; REVERSE_KOREAN['..-.'] = 'ㄴ'; REVERSE_KOREAN['-...'] = 'ㄷ'; REVERSE_KOREAN['...-'] = 'ㄹ';
+
+    // --- ENCODER / DECODER CORE LOGIC ---
+    const decomposeHangul = (str) => {
+      const result = [];
+      for (let i = 0; i < str.length; i++) {
+        const char = str[i];
+        const code = char.charCodeAt(0);
+        if (code >= 0xAC00 && code <= 0xD7A3) {
+          const offset = code - 0xAC00;
+          const choIdx = Math.floor(offset / 588);
+          const jungIdx = Math.floor((offset % 588) / 28);
+          const jongIdx = offset % 28;
+          
+          const cho = CHOSUNG[choIdx]; const jung = JUNGSUNG[jungIdx]; const jong = JONGSUNG[jongIdx];
+          
+          if (cho === 'ㄱ') result.push('ㄱ');
+          else if (cho === 'ㄲ') result.push('ㄱ', 'ㄱ');
+          else if (cho === 'ㄷㄷ') result.push('ㄷ', 'ㄷ'); 
+          else if (cho === 'ㅃ') result.push('ㅂ', 'ㅂ');
+          else if (cho === 'ㅆ') result.push('ㅅ', 'ㅅ');
+          else if (cho === 'ㅉ') result.push('ㅈ', 'ㅈ');
+          else result.push(cho);
+          
+          if (jung === 'ㅘ') result.push('ㅗ', 'ㅏ');
+          else if (jung === 'ㅙ') result.push('ㅗ', 'ㅐ');
+          else if (jung === 'ㅚ') result.push('ㅗ', 'ㅣ');
+          else if (jung === 'ㅝ') result.push('ㅜ', 'ㅓ');
+          else if (jung === 'ㅞ') result.push('ㅜ', 'ㅔ');
+          else if (jung === 'ㅟ') result.push('ㅜ', 'ㅣ');
+          else if (jung === 'ㅢ') result.push('ㅡ', 'ㅣ');
+          else if (jung === 'ㅒ') result.push('ㅑ', 'ㅣ');
+          else if (jung === 'ㅖ') result.push('ㅕ', 'ㅣ');
+          else result.push(jung);
+          
+          if (jong !== '') {
+            if (jong === 'ㄲ') result.push('ㄱ', 'ㄱ');
+            else if (jong === 'ㄳ') result.push('ㄱ', 'ㅅ');
+            else if (jong === 'ㄴㅈ') result.push('ㄴ', 'ㅈ');
+            else if (jong === 'ㄶ') result.push('ㄴ', 'ㅎ');
+            else if (jong === 'ㄹㄱ') result.push('ㄹ', 'ㄱ');
+            else if (jong === 'ㄹㅁ') result.push('ㄹ', 'ㅁ');
+            else if (jong === 'ㄹㅂ') result.push('ㄹ', 'ㅂ');
+            else if (jong === 'ㄹㅅ') result.push('ㄹ', 'ㅅ');
+            else if (jong === 'ㄹㅌ') result.push('ㄹ', 'ㅌ');
+            else if (jong === 'ㄹㅍ') result.push('ㄹ', 'ㅍ');
+            else if (jong === 'ㄹㅎ') result.push('ㄹ', 'ㅎ');
+            else if (jong === 'ㅄ') result.push('ㅂ', 'ㅅ');
+            else if (jong === 'ㅆ') result.push('ㅅ', 'ㅅ');
+            else result.push(jong);
+          }
+        } else { result.push(char); }
+      }
+      return result;
+    };
+
+    const textToMorse = (text) => {
+      if (!text) return '';
+      const words = text.toUpperCase().split(' ');
+      return words.map(word => decomposeHangul(word).map(char => MORSE_MAP[char] || '').filter(Boolean).join(' ')).join(' // ');
+    };
+
+    const assembleHangul = (jamos) => {
+      if (jamos.length === 0) return '';
+      let i = 0; let cho = '';
+      if (CHOSUNG.includes(jamos[i])) {
+        cho = jamos[i]; i++;
+        if (i < jamos.length && CHOSUNG.includes(jamos[i])) {
+          const combined = cho + jamos[i];
+          const doubles = { 'ㄱㄱ': 'ㄲ', 'ㄷㄷ': 'ㄸ', 'ㅂㅂ': 'ㅃ', 'ㅅㅅ': 'ㅆ', 'ㅈㅈ': 'ㅉ' };
+          if (doubles[combined]) { cho = doubles[combined]; i++; }
+        }
+      }
+      let jung = '';
+      if (i < jamos.length && JUNGSUNG.includes(jamos[i])) {
+        jung = jamos[i]; i++;
+        if (i < jamos.length && JUNGSUNG.includes(jamos[i])) {
+          const combined = jung + jamos[i];
+          const compounds = { 'ㅗㅏ': 'ㅘ', 'ㅗㅐ': 'ㅙ', 'ㅗㅣ': 'ㅚ', 'ㅜㅓ': 'ㅝ', 'ㅜㅔ': 'ㅞ', 'ㅜㅣ': 'ㅟ', 'ㅡㅣ': 'ㅢ', 'ㅑㅣ': 'ㅒ', 'ㅕㅣ': 'ㅖ' };
+          if (compounds[combined]) { jung = compounds[combined]; i++; }
+        }
+      }
+      let jong = '';
+      if (i < jamos.length && JONGSUNG.includes(jamos[i])) {
+        jong = jamos[i]; i++;
+        if (i < jamos.length && JONGSUNG.includes(jamos[i])) {
+          const combined = jong + jamos[i];
+          const compounds = { 'ㄱㄱ': 'ㄲ', 'ㄱㅅ': 'ㄳ', 'ㄴㅈ': 'ㄴㅈ', 'ㄴㅎ': 'ㄶ', 'ㄹㄱ': 'ㄹㄱ', 'ㄹㅁ': 'ㄹㅁ', 'ㄹㅂ': 'ㄹㅂ', 'ㄹㅅ': 'ㄹㅅ', 'ㄹㅌ': 'ㄹㅌ', 'ㄹㅍ': 'ㄹㅍ', 'ㄹㅎ': 'ㄹㅎ', 'ㅂㅅ': 'ㅂㅅ', 'ㅅㅅ': 'ㅆ' };
+          if (compounds[combined]) { jong = compounds[combined]; i++; }
+        }
+      }
+      if (cho && jung) {
+        const choIdx = CHOSUNG.indexOf(cho); const jungIdx = JUNGSUNG.indexOf(jung); const jongIdx = JONGSUNG.indexOf(jong || '');
+        if (choIdx !== -1 && jungIdx !== -1) {
+          const code = 0xAC00 + (choIdx * 588) + (jungIdx * 28) + (jongIdx !== -1 ? jongIdx : 0);
+          let syllable = String.fromCharCode(code);
+          while (i < jamos.length) { syllable += jamos[i]; i++; }
+          return syllable;
+        }
+      }
+      return jamos.join('');
+    };
+
+    const decodeMorseToText = (morseStr, isKoreanMode = true) => {
+      if (!morseStr) return '';
+      const words = morseStr.split(/\s*\/\/\s*/);
+      return words.map(word => {
+        if (isKoreanMode) {
+          const syllables = word.split(/\s*\/\s*/).filter(Boolean);
+          return syllables.map(syllable => {
+            const tokens = syllable.trim().split(/\s+/).filter(Boolean);
+            return assembleHangul(tokens.map(t => REVERSE_KOREAN[t] || REVERSE_ENGLISH[t] || '?'));
+          }).join('');
+        } else {
+          return word.trim().split(/\s+/).filter(Boolean).map(t => REVERSE_ENGLISH[t] || REVERSE_KOREAN[t] || '?').join('');
+        }
+      }).join(' ');
+    };
+
+    const formatTimestamp = (timestamp) => {
+      if (!timestamp) return '송출 중...';
+      const date = timestamp.seconds ? new Date(timestamp.seconds * 1000) : (typeof timestamp.toDate === 'function' ? timestamp.toDate() : new Date(timestamp));
+      return date.toLocaleTimeString('ko-KR', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit',
+        hour12: false 
+      });
+    };
+
+    // --- MAIN RETRO RADIO APP ---
+    function App() {
+      const [currentOperator, setCurrentOperator] = useState(null); 
+      const [regCallsign, setRegCallsign] = useState('');
+      const [regPassword, setRegPassword] = useState('');
+      const [isRegistering, setIsRegistering] = useState(false); 
+      const [showManual, setShowManual] = useState(false); // Added State: Technical Manual Bezel Modal
+      
+      const [activeMode, setActiveMode] = useState('TX'); // TX, RX, KEY
+      const [channel, setChannel] = useState('CW-7');
+      const [pitch, setPitch] = useState(650); 
+      const [wpm, setWpm] = useState(15);      
+      const [squelchOn, setSquelchOn] = useState(true);
+
+      const [txTargetType, setTxTargetType] = useState('BROADCAST'); 
+      const [targetCallsign, setTargetCallsign] = useState('');      
+
+      const [inputText, setInputText] = useState('');
+      const [morseOutput, setMorseOutput] = useState('');
+      const [isSending, setIsSending] = useState(false);
+
+      const [isPlaying, setIsPlaying] = useState(false);
+      const [activeCharIndex, setActiveCharIndex] = useState(-1);
+      const [isTelegraphPressed, setIsTelegraphPressed] = useState(false);
+
+      const [messages, setMessages] = useState([]);
+      const [user, setUser] = useState(null);
+      const [rxLanguageMode, setRxLanguageMode] = useState(true); 
+      const [playingMessageId, setPlayingMessageId] = useState(null);
+      const [selectedMessage, setSelectedMessage] = useState(null);
+
+      const [needleAngle, setNeedleAngle] = useState(-52);
+      const [manualMorse, setManualMorse] = useState('');
+      const [lastPressDown, setLastPressDown] = useState(0);
+      const [lastPressUp, setLastPressUp] = useState(0);
+      const [toast, setToast] = useState({ show: false, text: '' });
+
+      const audioCtxRef = useRef(null);
+      const oscRef = useRef(null);
+      const gainRef = useRef(null);
+      const staticGainRef = useRef(null);
+      const timeoutIds = useRef([]);
+      const scrollContainerRef = useRef(null);
+
+      const [db, setDb] = useState(null);
+      const appId = typeof __app_id !== 'undefined' ? __app_id : 'minimalist-retro-transceiver';
+
+      const showToast = (text) => {
+        setToast({ show: true, text });
+        setTimeout(() => setToast({ show: false, text: '' }), 2500);
+      };
+
+      useEffect(() => {
+        if (typeof __firebase_config !== 'undefined' && window.Firebase) {
+          try {
+            const firebaseConfig = JSON.parse(__firebase_config);
+            const app = window.Firebase.initializeApp(firebaseConfig);
+            const fbAuth = window.Firebase.getAuth(app);
+            const fbDb = window.Firebase.getFirestore(app);
+            setDb(fbDb);
+
+            const authenticate = async () => {
+              if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                await window.Firebase.signInWithCustomToken(fbAuth, __initial_auth_token);
+              } else {
+                await window.Firebase.signInAnonymously(fbAuth);
+              }
+            };
+            authenticate();
+            window.Firebase.onAuthStateChanged(fbAuth, (usr) => setUser(usr));
+          } catch (e) {
+            console.error(e);
+            showToast("오프라인 가동 모드");
+          }
+        }
+      }, []);
+
+      useEffect(() => {
+        if (!db || !user) return;
+        
+        const colRef = window.Firebase.collection(db, 'artifacts', appId, 'public', 'data', 'morse_messages');
+        const q = window.Firebase.query(colRef);
+
+        const unsubSnapshot = window.Firebase.onSnapshot(q, (snapshot) => {
+          const fetched = [];
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            
+            const currentOpUpper = currentOperator ? currentOperator.toUpperCase().trim() : '';
+            const msgSenderUpper = data.sender ? data.sender.toUpperCase().trim() : '';
+            const msgRecipientUpper = data.recipient ? data.recipient.toUpperCase().trim() : '';
+
+            if (data.type === 'private') {
+              if (currentOpUpper && (currentOpUpper === msgSenderUpper || currentOpUpper === msgRecipientUpper)) {
+                fetched.push({ id: doc.id, ...data });
+              }
+            } else {
+              if (data.channel && data.channel.toUpperCase().trim() === channel.toUpperCase().trim()) {
+                fetched.push({ id: doc.id, ...data });
+              }
+            }
+          });
+          
+          fetched.sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+          setMessages(fetched);
+
+          if (scrollContainerRef.current) {
+            setTimeout(() => { scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight; }, 100);
+          }
+        }, (error) => {
+          console.error("Firestore error:", error);
+        });
+        return () => unsubSnapshot();
+      }, [db, user, channel, currentOperator]);
+
+      useEffect(() => { setMorseOutput(textToMorse(inputText)); }, [inputText]);
+
+      useEffect(() => {
+        const interval = setInterval(() => {
+          if (isTelegraphPressed || isPlaying) {
+            setNeedleAngle(15 + Math.floor(Math.random() * 35));
+          } else {
+            setNeedleAngle(-50 + Math.floor(Math.random() * 6));
+          }
+        }, 90);
+        return () => clearInterval(interval);
+      }, [isTelegraphPressed, isPlaying]);
+
+      useEffect(() => {
+        const handleKeyDown = (e) => {
+          if (activeMode !== 'KEY') return;
+          if (e.code === 'Space') { e.preventDefault(); if (e.repeat) return; pressTelegraphKey(); }
+        };
+        const handleKeyUp = (e) => {
+          if (activeMode !== 'KEY') return;
+          if (e.code === 'Space') { e.preventDefault(); releaseTelegraphKey(); }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('keyup', handleKeyUp);
+        return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
+      }, [activeMode, isTelegraphPressed, lastPressDown, manualMorse]);
+
+      useEffect(() => {
+        if (squelchOn && audioCtxRef.current) {
+          createStaticSquelchNoise();
+        } else if (staticGainRef.current) {
+          staticGainRef.current.gain.setValueAtTime(0, audioCtxRef.current.currentTime);
+        }
+      }, [squelchOn]);
+
+      const handleRegisterLicense = async (e) => {
+        e.preventDefault();
+        const callsign = regCallsign.trim().toUpperCase();
+        const password = regPassword.trim();
+
+        if (!callsign || !password) {
+          showToast("콜사인과 암호를 모두 입력하십시오.");
+          return;
+        }
+
+        if (!db || !user) {
+          showToast("서버 무선망 미연결 상태입니다.");
+          return;
+        }
+
+        try {
+          const docRef = window.Firebase.doc(db, 'artifacts', appId, 'public', 'data', 'operators', callsign);
+          const docSnap = await window.Firebase.getDoc(docRef);
+
+          if (docSnap.exists()) {
+            showToast("이미 허가 등록된 콜사인 명칭입니다.");
+          } else {
+            await window.Firebase.setDoc(docRef, {
+              callsign,
+              password, 
+              createdAt: window.Firebase.serverTimestamp()
+            });
+            showToast("인가 전신사 등록 성공! 이제 접속해 주십시오.");
+            setIsRegistering(false);
+          }
+        } catch (err) {
+          console.error(err);
+          showToast("면허 등록 중 서버 지연 발생.");
+        }
+      };
+
+      const handleLoginLicense = async (e) => {
+        e.preventDefault();
+        const callsign = regCallsign.trim().toUpperCase();
+        const password = regPassword.trim();
+
+        if (!callsign || !password) {
+          showToast("콜사인과 암호를 입력하십시오.");
+          return;
+        }
+
+        try {
+          const docRef = window.Firebase.doc(db, 'artifacts', appId, 'public', 'data', 'operators', callsign);
+          const docSnap = await window.Firebase.getDoc(docRef);
+
+          if (docSnap.exists() && docSnap.data().password === password) {
+            setCurrentOperator(callsign);
+            showToast(`[${callsign}] 무전국 기기 점등 완료`);
+          } else {
+            showToast("등록 정보가 일치하지 않습니다.");
+          }
+        } catch (err) {
+          console.error(err);
+          showToast("보안 검증 서버 통신 실패.");
+        }
+      };
+
+      // --- AUDIO GENERATORS ---
+      const initAudioCtx = () => {
+        if (!audioCtxRef.current) {
+          audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtxRef.current.state === 'suspended') {
+          audioCtxRef.current.resume();
+        }
+      };
+
+      const createStaticSquelchNoise = () => {
+        try {
+          const ctx = audioCtxRef.current;
+          if (!ctx) return;
+          const bufferSize = ctx.sampleRate * 2;
+          const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+          const data = buffer.getChannelData(0);
+          for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+          }
+          const whiteNoise = ctx.createBufferSource();
+          whiteNoise.buffer = buffer;
+          whiteNoise.loop = true;
+
+          const filter = ctx.createBiquadFilter();
+          filter.type = 'bandpass';
+          filter.frequency.value = 1100;
+          filter.Q.value = 0.4;
+
+          const gainNode = ctx.createGain();
+          gainNode.gain.setValueAtTime(squelchOn ? 0.002 : 0, ctx.currentTime);
+
+          whiteNoise.connect(filter);
+          filter.connect(gainNode);
+          gainNode.connect(ctx.destination);
+          whiteNoise.start();
+
+          staticGainRef.current = gainNode;
+        } catch(e) {}
+      };
+
+      const startOscillator = () => {
+        initAudioCtx();
+        stopOscillator();
+
+        const ctx = audioCtxRef.current;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.value = pitch;
+        
+        gain.gain.setValueAtTime(0, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.006);
+        
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+
+        oscRef.current = osc;
+        gainRef.current = gain;
+        setIsTelegraphPressed(true);
+      };
+
+      const stopOscillator = () => {
+        const ctx = audioCtxRef.current;
+        if (oscRef.current && gainRef.current && ctx) {
+          try {
+            const osc = oscRef.current;
+            const gain = gainRef.current;
+            gain.gain.setValueAtTime(gain.gain.value, ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.006);
+            setTimeout(() => { try { osc.stop(); osc.disconnect(); } catch(e){} }, 12);
+          } catch(e){}
+          oscRef.current = null;
+          gainRef.current = null;
+        }
+        setIsTelegraphPressed(false);
+      };
+
+      const stopPlaying = () => {
+        timeoutIds.current.forEach(clearTimeout);
+        timeoutIds.current = [];
+        stopOscillator();
+        setIsPlaying(false);
+        setPlayingMessageId(null);
+        setActiveCharIndex(-1);
+      };
+
+      const triggerPlayback = (morseString, msgId = null) => {
+        stopPlaying();
+        setIsPlaying(true);
+        if (msgId) setPlayingMessageId(msgId);
+
+        const dotLen = 1200 / wpm;
+        const sequence = morseString.split('');
+        let accDelay = 0;
+
+        sequence.forEach((symbol, idx) => {
+          const run = (fn, delay) => {
+            const id = setTimeout(fn, delay);
+            timeoutIds.current.push(id);
+          };
+
+          if (symbol === '.' || symbol === '-') {
+            run(() => { setActiveCharIndex(idx); startOscillator(); }, accDelay);
+            const soundDuration = symbol === '-' ? dotLen * 3 : dotLen;
+            accDelay += soundDuration;
+            run(() => stopOscillator(), accDelay);
+            accDelay += dotLen;
+          } else if (symbol === ' ') {
+            accDelay += dotLen * 1.8;
+          } else if (symbol === '/') {
+            accDelay += dotLen * 4;
+          }
+        });
+
+        const endId = setTimeout(() => {
+          setIsPlaying(false);
+          setPlayingMessageId(null);
+          setActiveCharIndex(-1);
+          showToast("수신 전파 수납 해독 완료");
+        }, accDelay + 100);
+        timeoutIds.current.push(endId);
+      };
+
+      const pressTelegraphKey = () => {
+        if (isTelegraphPressed) return;
+        startOscillator();
+        const timeNow = Date.now();
+        const silentDelta = timeNow - lastPressUp;
+        const dotLen = 1200 / wpm;
+
+        if (manualMorse.length > 0 && lastPressUp > 0) {
+          if (silentDelta > dotLen * 5.5) { setManualMorse(prev => prev + " // "); }
+          else if (silentDelta > dotLen * 2.2) { setManualMorse(prev => prev + " "); }
+        }
+        setLastPressDown(timeNow);
+      };
+
+      const releaseTelegraphKey = () => {
+        if (!isTelegraphPressed) return;
+        stopOscillator();
+        const timeNow = Date.now();
+        setLastPressUp(timeNow);
+        const pressDelta = timeNow - lastPressDown;
+        const dotLen = 1200 / wpm;
+        setManualMorse(prev => prev + (pressDelta < (dotLen * 2.1) ? '.' : '-'));
+      };
+
+      const handleTransmit = async () => {
+        if (!inputText.trim()) return;
+        if (!db || !user) { showToast("통신 서버 연결 오류"); return; }
+        
+        if (txTargetType === 'PRIVATE' && !targetCallsign.trim()) {
+          showToast("수신 전신사 콜사인을 지정하십시오.");
+          return;
+        }
+
+        setIsSending(true);
+        try {
+          const cleanCh = channel.toUpperCase().trim() || "CW-7";
+          const colRef = window.Firebase.collection(db, 'artifacts', appId, 'public', 'data', 'morse_messages');
+          
+          await window.Firebase.addDoc(colRef, {
+            sender: currentOperator,
+            type: txTargetType.toLowerCase(), 
+            recipient: txTargetType === 'PRIVATE' ? targetCallsign.trim().toUpperCase() : null,
+            text: inputText,
+            morse: morseOutput,
+            channel: cleanCh,
+            createdAt: window.Firebase.serverTimestamp()
+          });
+
+          showToast("전송 및 전파 기록 테이프 인쇄 완료");
+          setInputText('');
+        } catch(e) {
+          showToast("송출 장치 장애");
+        } finally { setIsSending(false); }
+      };
+
+      const triggerReply = (recipientCallsign) => {
+        setTxTargetType('PRIVATE');
+        setTargetCallsign(recipientCallsign);
+        setActiveMode('TX');
+        showToast(`[${recipientCallsign}] 전신사 상대 답장 타진 대기`);
+      };
+
+      return (
+        <div className="w-full max-w-2xl mx-auto flex flex-col gap-4 select-none">
+          
+          {/* SYSTEM TOP TITLE PLAQUE */}
+          <div className="text-center py-2 animate-fade-in border-b border-stone-800 pb-3">
+            <h1 className="text-xl md:text-2xl font-extrabold text-stone-100 tracking-wider">
+              한글 모스 부호 송수신기
+            </h1>
+            <p className="text-[9px] text-stone-500 font-mono tracking-widest mt-1 uppercase">
+              KOREAN RADIO TELEGRAPHY TRANSCEIVER
+            </p>
+          </div>
+
+          {/* TOAST SYSTEM COCKPIT */}
+          {toast.show && (
+            <div className="fixed top-8 left-1/2 -translate-x-1/2 z-50 animate-fade-in pointer-events-none">
+              <div className="bg-[#11130e] border border-amber-600/50 rounded px-4 py-2 text-xs vintage-mono tracking-wider text-amber-500 shadow-2xl flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                {toast.text}
+              </div>
+            </div>
+          )}
+
+          {!currentOperator ? (
+            <div className="flex flex-col gap-4 max-w-md mx-auto w-full">
+              <div className="chassis-body rounded-2xl p-6 relative w-full shadow-2xl animate-fade-in border-t border-slate-300/20">
+                <div className="absolute top-2.5 left-2.5"><div className="iron-screw"></div></div>
+                <div className="absolute top-2.5 right-2.5"><div className="iron-screw"></div></div>
+                <div className="absolute bottom-2.5 left-2.5"><div className="iron-screw"></div></div>
+                <div className="absolute bottom-2.5 right-2.5"><div className="iron-screw"></div></div>
+
+                <div className="text-center mb-6 mt-2">
+                  <span className="text-[9px] font-black tracking-widest text-stone-300 font-mono block">
+                    AN/PRC-77S EMULATOR STATION
+                  </span>
+                  <h2 className="text-lg font-bold text-stone-100 tracking-wider mt-1.5 flex items-center justify-center gap-2">
+                    <i className="lucide-radio text-amber-500 text-lg animate-pulse"></i>
+                    전신사 라이선스 인가 데스크
+                  </h2>
+                  <div className="h-[2px] bg-[#23272e] w-32 mx-auto mt-2.5"></div>
+                </div>
+
+                <form onSubmit={isRegistering ? handleRegisterLicense : handleLoginLicense} className="flex flex-col gap-4">
+                  
+                  <div>
+                    <label className="block text-[11px] font-mono text-stone-200 mb-1.5 uppercase tracking-wider font-bold">
+                      Operator Callsign (전신사 ID - 영문/숫자)
+                    </label>
+                    <input 
+                      type="text" 
+                      value={regCallsign} 
+                      onChange={(e) => setRegCallsign(e.target.value.toUpperCase())}
+                      placeholder="예: CALLSIGN-ALPHA"
+                      maxLength="12"
+                      className="w-full bg-stone-900/90 border border-stone-600 rounded px-3 py-2 text-xs text-amber-400 font-mono tracking-widest uppercase focus:outline-none focus:border-amber-500 shadow-inner font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-mono text-stone-200 mb-1.5 uppercase tracking-wider font-bold">
+                      Access Password (보안 비밀번호)
+                    </label>
+                    <input 
+                      type="password" 
+                      value={regPassword} 
+                      onChange={(e) => setRegPassword(e.target.value)}
+                      placeholder="••••"
+                      className="w-full bg-stone-900/90 border border-stone-600 rounded px-3 py-2 text-xs text-amber-400 font-mono tracking-widest focus:outline-none focus:border-amber-500 shadow-inner font-bold"
+                    />
+                  </div>
+
+                  <button 
+                    type="submit"
+                    className="w-full py-2.5 rounded bg-amber-600 hover:bg-amber-500 text-stone-950 font-black tracking-widest font-mono text-xs border border-amber-700 mt-2 shadow"
+                  >
+                    {isRegistering ? "CREATE LICENSE (면허 신청 등록)" : "ESTABLISH CONNECTION (무전국 가동)"}
+                  </button>
+
+                  <div className="flex justify-between items-center text-[10px] font-mono text-stone-300 border-t border-[#23272e] pt-3 mt-1">
+                    <span>SECURITY: SHIELD-ACTIVE</span>
+                    <button 
+                      type="button" 
+                      onClick={() => setIsRegistering(!isRegistering)}
+                      className="text-amber-400 font-bold underline hover:text-amber-300"
+                    >
+                      {isRegistering ? "기존 전신사 면허 로그인" : "새 전신사 라이선스 서버 등록"}
+                    </button>
+                  </div>
+
+                  {/* USER MANUAL INTERFACE ACTION TRIGGER BUTTON */}
+                  <div className="mt-2 border-t border-[#23272e] pt-3 flex justify-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowManual(true)}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-stone-900/60 hover:bg-stone-850 border border-stone-700 text-[10px] font-bold text-amber-400 rounded-lg tracking-wider transition-all shadow-md"
+                    >
+                      <i className="lucide-book-open text-[11px]"></i>
+                      📖 사용설명서 & 작동원리 교범 보기
+                    </button>
+                  </div>
+
+                </form>
+              </div>
+
+              {/* TECHNICAL MANUAL FLOATING DRAWER BLOCK */}
+              {showManual && (
+                <div className="fixed inset-0 bg-black/85 flex items-center justify-center p-4 z-50 animate-fade-in backdrop-blur-xs">
+                  <div className="bg-[#1e222a] border-4 border-[#3a414b] rounded-xl p-5 max-w-lg w-full max-h-[85vh] overflow-y-auto shadow-2xl relative text-left text-stone-300 vintage-mono">
+                    <div className="absolute top-3 left-3"><div className="iron-screw"></div></div>
+                    <div className="absolute top-3 right-3"><div className="iron-screw"></div></div>
+                    
+                    <div className="border-b border-stone-700 pb-3 mb-4 text-center mt-2">
+                      <h3 className="text-sm md:text-base font-extrabold text-amber-500 tracking-wider">
+                        📖 AN/PRC-77S 기술 교범 & 작동 원리
+                      </h3>
+                      <p className="text-[8px] text-stone-500 tracking-widest mt-0.5">MILITARY TECHNICAL MANUAL v7.0</p>
+                    </div>
+                    
+                    <div className="space-y-4 text-xs leading-relaxed font-sans">
+                      <div>
+                        <h4 className="font-bold text-amber-400 border-b border-stone-800 pb-1 mb-1.5 flex items-center gap-1.5 font-mono text-[11px]">
+                          🔧 1. 작동법 (OPERATION GUIDE)
+                        </h4>
+                        <ul className="list-disc pl-4 space-y-1 text-stone-400 text-[11px]">
+                          <li><strong>라이선스 가입/접속:</strong> 나만의 고유한 콜사인(ID)과 보안 비밀번호를 임의로 입력해 서버(Firestore) 무선국에 신규 등록하거나 가입한 정보로 기기에 접속합니다.</li>
+                          <li><strong>송신 모드 (TX):</strong> 한글/영문 텍스트를 입력하면 상단의 CRT 모니터 및 모스 부호 출력란에 기호가 즉시 자동 매칭됩니다. [CQ BROADCAST]로 무전기 전체 채널에 전파를 뿌리거나, [DIRECT DM]을 켜고 특정 전신사의 콜사인을 지정해 오직 그 수신자에게만 도달하는 비밀 전파를 송출할 수 있습니다.</li>
+                          <li><strong>수신 모드 (RX):</strong> 수신국 보존 전장 목록(Telegram List)에서 전파 수신 시간과 송출 상태를 확인하고, 편지를 클릭해 우측 전보 상세 내용에서 비프음 재생(🔊)을 청취하거나 즉시 답장(REPLY)을 타건할 수 있습니다.</li>
+                          <li><strong>수동 연습 (KEY):</strong> 황동식 전신 키 손잡이를 마우스나 모바일 화면 터치로 직접 두드리거나 키보드 [Spacebar]를 활용해 비프음을 연주하며, 즉시 해독되어 나타나는 타전 자모 조합 훈련을 진행합니다.</li>
+                        </ul>
+                      </div>
+
+                      <div>
+                        <h4 className="font-bold text-amber-400 border-b border-stone-800 pb-1 mb-1.5 flex items-center gap-1.5 font-mono text-[11px]">
+                          ⚙️ 2. 작동 원리 (TECHNICAL PRINCIPLE)
+                        </h4>
+                        <ul className="list-disc pl-4 space-y-1 text-stone-400 text-[11px]">
+                          <li><strong>한글 초성·중성·종성 분해 연산:</strong> 입력한 한글 단어를 유니코드 기반의 초성, 중성, 종성 단위로 분해하고, 한글 자모 규격에 맞춰 개별 모스 기호 배열로 치환합니다. 수신 시에는 반대로 전신 규칙에 맞추어 각각의 자모 요소를 순차 역조합하여 뭉쳐진 하나의 완성형 완성 음절로 복원해 냅니다.</li>
+                          <li><strong>실시간 비동기 클라우드 동기화:</strong> 본 송수신기는 구글 클라우드 Firestore의 리얼타임 데이터베이스 파이프라인을 경유합니다. 모든 전파는 발송된 서버 타임스탬프(`seconds`)와 함께 기록되어 수신자가 오프라인 상태이거나 무전기가 꺼져 있어도 영구히 보존되어 로그인하는 즉시 과거 수장 대장을 시간별로 다운로드받아 볼 수 있습니다.</li>
+                          <li><strong>아날로그 물리 음향 재현:</strong> Web Audio API 기술로 아날로그 신호 발생기를 구현하여 500Hz~850Hz 사이의 사인파 주파수(OscillatorNode)를 발진시키고 전압 서지 보정 필터를 달아 노이즈 없는 선명한 CW 단일 통신 비프를 구현하였으며, 스퀄치 스위치로 정전기 공전 노이즈(White Noise Filter)를 덧씌웠습니다.</li>
+                        </ul>
+                      </div>
+
+                      <div className="bg-stone-950 p-2.5 rounded border border-amber-900/40 text-center text-amber-500 text-[11.5px] font-bold font-mono tracking-wide">
+                        💡 "열심히 KEY(연습)해서 무선종사자 자격증을 획득하자!"
+                      </div>
+
+                      <div className="text-[9px] text-stone-500 text-center border-t border-stone-800 pt-3 font-mono">
+                        DEVELOPED BY AI CODING RESEARCH INSTITUTE
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex justify-end">
+                      <button 
+                        type="button"
+                        onClick={() => setShowManual(false)}
+                        className="px-4 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-300 border border-stone-700 rounded text-[10px] font-bold tracking-wider font-mono"
+                      >
+                        CLOSE
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="chassis-body rounded-2xl p-5 relative border-t border-slate-300/30">
+              
+              <div className="absolute top-2.5 left-2.5"><div className="iron-screw"></div></div>
+              <div className="absolute top-2.5 right-2.5"><div className="iron-screw"></div></div>
+              <div className="absolute bottom-2.5 left-2.5"><div className="iron-screw"></div></div>
+              <div className="absolute bottom-2.5 right-2.5"><div className="iron-screw"></div></div>
+
+              {/* UPPER INSTRUMENT PANEL BLOCK */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center mb-4 mt-2">
+                
+                {/* ANALOG NEEDLE SIGNAL STRENGTH METERS */}
+                <div className="md:col-span-4 flex flex-col items-center">
+                  <span className="text-[8px] font-black tracking-widest text-stone-200 font-mono uppercase mb-1">SIGNAL METER</span>
+                  <div className="w-28 h-28 rounded-full border-4 border-[#23272e] meter-face relative flex items-center justify-center overflow-hidden">
+                    
+                    <svg viewBox="0 0 100 100" className="w-full h-full absolute inset-0 text-stone-600/70 font-sans">
+                      <path d="M 20 80 A 35 35 0 0 1 80 80" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3" />
+                      <text x="21" y="75" className="text-[7px]" textAnchor="middle">0</text>
+                      <text x="50" y="38" className="text-[7px]" textAnchor="middle">S9</text>
+                      <text x="79" y="75" className="text-[7px] fill-rose-600 font-bold" textAnchor="middle">30dB</text>
+                    </svg>
+
+                    <div 
+                      className="w-[1.5px] bg-rose-600 origin-bottom absolute bottom-6 h-16 transition-transform duration-75"
+                      style={{ transform: `rotate(${needleAngle}deg)`, left: 'calc(50% - 0.75px)' }}
+                    >
+                      <div className="w-1.5 h-1.5 bg-rose-600 rounded-full absolute -top-0.5 -left-0.5"></div>
+                    </div>
+
+                    <div className="absolute bottom-1.5 text-[8px] font-mono text-stone-500 font-bold">AN-77</div>
+                  </div>
+                </div>
+
+                {/* INTEGRATED SINGLE PHOSPHOR CRT SCREEN MONITOR */}
+                <div className="md:col-span-8 crt-monitor rounded-xl p-3 flex flex-col justify-between min-h-[112px] relative overflow-hidden">
+                  <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.15)_50%)] bg-[size:100%_4px] pointer-events-none z-10"></div>
+                  
+                  <div className="flex justify-between items-center text-[9px] font-mono text-amber-500/70 border-b border-[#3c3222]/50 pb-1 z-10">
+                    <span className="flex items-center gap-1.5">
+                      {/* ADJUSTMENT: Substantially Enlarged Pilot Blinking Bulb */}
+                      <span className="w-3.5 h-3.5 rounded-full bg-[#10b981] shadow-[0_0_12px_#10b981] animate-pulse"></span>
+                      STATION RECOVERY ON LINE
+                    </span>
+                    <span>MODE: {activeMode}</span>
+                  </div>
+
+                  <div className="my-1.5 flex-grow flex flex-col justify-center z-10">
+                    {activeMode === 'TX' && (
+                      <div className="vintage-mono text-amber-500 text-sm tracking-widest break-all leading-normal select-all">
+                        {morseOutput ? (
+                          morseOutput.split('').map((char, index) => (
+                            <span key={index} className={index === activeCharIndex ? "bg-amber-500 text-stone-950 font-bold px-0.5 rounded" : ""}>{char}</span>
+                          ))
+                        ) : (
+                          <span className="text-stone-700 font-sans text-[11px] block italic tracking-normal">송신 전파 대기 중 •••</span>
+                        )}
+                      </div>
+                    )}
+
+                    {activeMode === 'RX' && (
+                      <div className="w-full flex flex-col">
+                        <div className="paper-ribbon rounded p-2.5 min-h-[65px] max-h-[70px] overflow-y-auto font-mono text-[11px] flex flex-col gap-1 relative border border-amber-900/10" ref={scrollContainerRef}>
+                          {messages.length === 0 ? (
+                            <div className="text-center text-stone-500 italic py-3 font-sans text-[10px]">수신 전파 라음 없음 // 감청 대기 중...</div>
+                          ) : (
+                            messages.map((msg, i) => (
+                              <div key={msg.id || i} className="border-b border-stone-400/20 pb-0.5 text-[#1b2218]">
+                                <div className="flex justify-between items-center text-[8px] text-stone-600 font-sans font-bold">
+                                  <span>
+                                    {msg.type === 'private' ? "🔒 [비밀통신] " : "📡 [CQ광역] "}
+                                    [{msg.sender}]
+                                  </span>
+                                  <span className="vintage-mono">[{formatTimestamp(msg.createdAt)}]</span>
+                                </div>
+                                <div className="text-xs break-all font-bold tracking-wider">{msg.morse}</div>
+                                <div className="text-[#0e5c2d] font-bold text-[10px] font-sans mt-0.5">
+                                  ↳ 해독: {decodeMorseToText(msg.morse, rxLanguageMode)}
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {activeMode === 'KEY' && (
+                      <div className="vintage-mono text-emerald-400 text-sm tracking-widest leading-relaxed">
+                        {manualMorse || <span className="text-stone-800 text-[11px] font-sans italic">연습 모스 키 타격 대기</span>}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex justify-between text-[8px] text-stone-600 font-mono pt-1 z-10 border-t border-[#3c3222]/20">
+                    <span>CHANNEL: {channel}</span>
+                    <button onClick={() => setCurrentOperator(null)} className="text-amber-500/70 hover:text-amber-500 underline font-bold font-sans">인가 로그아웃</button>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* GIANT OPERATOR CALLSIGN PLATE Display Block */}
+              <div className="bg-[#1b2028] rounded-xl p-3 border-2 border-[#12151a] flex flex-col sm:flex-row items-center justify-between shadow-inner mb-4">
+                <div className="flex items-center gap-3 mb-2 sm:mb-0">
+                  {/* ADJUSTMENT: Substantially Enlarged On-Air Active Neon Diode */}
+                  <div className="w-5 h-5 rounded-full bg-emerald-500 shadow-[0_0_14px_#10b981] animate-pulse border-2 border-emerald-400/50"></div>
+                  <span className="text-stone-300 font-bold tracking-widest text-[11px] font-mono">
+                    ACTIVE ON-AIR OPERATOR LICENSE PLATE
+                  </span>
+                </div>
+                
+                <div className="bg-stone-950 border border-amber-900/40 rounded-lg px-5 py-2 flex items-center gap-3 shadow-2xl">
+                  <span className="text-[10px] font-mono text-stone-500 tracking-wider">CALLSIGN ID:</span>
+                  <span className="text-amber-500 font-mono text-xl md:text-2xl font-black tracking-widest uppercase text-center drop-shadow-[0_0_5px_rgba(245,158,11,0.5)]">
+                    {currentOperator}
+                  </span>
+                </div>
+              </div>
+
+              {/* TUNING ADJUSTMENT CONTROLS DECK */}
+              <div className="bg-[#121416] rounded-xl p-3 border border-stone-800/80 mb-4 flex flex-col md:flex-row justify-between items-center gap-4 shadow-inner">
+                
+                <div className="flex gap-4 w-full md:w-auto">
+                  <div className="flex-grow md:flex-grow-0">
+                    <span className="block text-[8px] font-bold text-stone-300 font-mono mb-1">SPEED ({wpm} WPM)</span>
+                    <input 
+                      type="range" min="10" max="25" value={wpm} 
+                      onChange={(e) => setWpm(Number(e.target.value))} 
+                      className="w-28 accent-amber-600 bg-stone-900 h-1 rounded cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex-grow md:flex-grow-0">
+                    <span className="block text-[8px] font-bold text-stone-300 font-mono mb-1">TONE ({pitch} Hz)</span>
+                    <input 
+                      type="range" min="500" max="850" value={pitch} 
+                      onChange={(e) => setPitch(Number(e.target.value))} 
+                      className="w-28 accent-amber-600 bg-stone-900 h-1 rounded cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                {/* THREE-WAY SLIDING RADIAL ROTARY TOGGLE */}
+                <div className="flex items-center gap-1.5 bg-stone-950/60 p-1 rounded-lg border border-stone-900 w-full md:w-auto justify-around">
+                  <button 
+                    onClick={() => { stopPlaying(); setActiveMode('TX'); }}
+                    className={`px-3 py-1.5 text-[10px] font-mono font-bold rounded transition-all ${
+                      activeMode === 'TX' ? 'bg-amber-600 text-stone-950 font-black shadow' : 'text-stone-300 hover:text-stone-100'
+                    }`}
+                  >
+                    TX (송신)
+                  </button>
+                  <button 
+                    onClick={() => { stopPlaying(); setActiveMode('RX'); }}
+                    className={`px-3 py-1.5 text-[10px] font-mono font-bold rounded transition-all ${
+                      activeMode === 'RX' ? 'bg-amber-600 text-stone-950 font-black shadow' : 'text-stone-300 hover:text-stone-100'
+                    }`}
+                  >
+                    RX (수신)
+                  </button>
+                  <button 
+                    onClick={() => { stopPlaying(); setActiveMode('KEY'); }}
+                    className={`px-3 py-1.5 text-[10px] font-mono font-bold rounded transition-all ${
+                      activeMode === 'KEY' ? 'bg-amber-600 text-stone-950 font-black shadow' : 'text-stone-300 hover:text-stone-100'
+                    }`}
+                  >
+                    KEY (연습)
+                  </button>
+                </div>
+
+              </div>
+
+              {/* DYNAMIC RETRO COMM CONCRETE PLATFORMS */}
+              <div className="bg-[#0b0c0d] border border-stone-900 p-3.5 rounded-xl mb-4">
+                
+                {/* TX WORKSPACE */}
+                {activeMode === 'TX' && (
+                  <div className="flex flex-col gap-2 animate-fade-in">
+                    
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-900 pb-2">
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] font-mono text-stone-300 font-bold">송신 방식 전환:</span>
+                        <div className="flex bg-stone-950 rounded p-0.5 border border-stone-800 text-[9px] font-mono">
+                          <button 
+                            type="button"
+                            onClick={() => setTxTargetType('BROADCAST')}
+                            className={`px-2 py-1 rounded ${txTargetType === 'BROADCAST' ? 'bg-amber-600 text-stone-950 font-black' : 'text-stone-500'}`}
+                          >
+                            CQ BROADCAST (모두에게)
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => setTxTargetType('PRIVATE')}
+                            className={`px-2 py-1 rounded ${txTargetType === 'PRIVATE' ? 'bg-amber-600 text-stone-950 font-black' : 'text-stone-500'}`}
+                          >
+                            DIRECT DM (특정 전신사)
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono text-stone-300">채널 주파수:</span>
+                        <input 
+                          type="text" 
+                          value={channel} 
+                          onChange={(e) => setChannel(e.target.value.toUpperCase())} 
+                          className="bg-stone-900 border border-stone-800 text-amber-500 font-bold px-1 py-0.5 rounded w-16 text-center focus:outline-none text-[10px] font-mono" 
+                        />
+                      </div>
+                    </div>
+
+                    {txTargetType === 'PRIVATE' && (
+                      <div className="flex items-center gap-2 bg-[#121416] p-2 rounded border border-stone-800 animate-slide-down">
+                        <span className="text-[10px] font-mono text-stone-300 font-bold">수신할 전신사의 대포 콜사인 ID 입력:</span>
+                        <input 
+                          type="text" 
+                          value={targetCallsign} 
+                          onChange={(e) => setTargetCallsign(e.target.value.toUpperCase().trim())}
+                          placeholder="상대 ID 기입"
+                          className="bg-stone-950 border border-stone-800 text-amber-500 font-bold px-2 py-0.5 rounded text-xs focus:outline-none w-32 font-mono uppercase tracking-widest"
+                        />
+                        <span className="text-[9px] text-stone-500 font-sans">※ 지정한 콜사인 소지자 외에는 전파 수신이 원천 차단됩니다.</span>
+                      </div>
+                    )}
+
+                    <textarea 
+                      value={inputText}
+                      onChange={(e) => setInputText(e.target.value)}
+                      placeholder="이곳에 한글로 메시지를 작성하면 상단 CRT 화면에 즉각 전신 신호로 번역 매칭됩니다..."
+                      rows="2"
+                      className="w-full bg-[#050606] border border-stone-900 rounded-lg p-2.5 text-xs text-amber-400 placeholder-stone-850 focus:outline-none focus:border-stone-800 resize-none font-sans mt-1"
+                    />
+
+                    <div className="flex justify-between items-center text-[10px] font-mono mt-1">
+                      <span className="text-stone-400">FROM SENDER: <strong className="text-amber-500 font-bold">{currentOperator}</strong></span>
+                      
+                      <div className="flex gap-1.5">
+                        {morseOutput && (
+                          <button 
+                            onClick={() => isPlaying ? stopPlaying() : triggerPlayback(morseOutput)}
+                            className={`px-3 py-1.5 rounded text-[10px] font-mono font-bold border transition-all ${
+                              isPlaying ? 'bg-rose-600 text-stone-950 border-rose-700 animate-pulse' : 'bg-stone-900 text-stone-300 border-stone-800'
+                            }`}
+                          >
+                            {isPlaying ? "STOP" : "PREVIEW"}
+                          </button>
+                        )}
+                        <button 
+                          onClick={handleTransmit}
+                          disabled={isSending || !inputText}
+                          className={`px-4 py-1.5 rounded text-[10px] font-bold font-mono border transition-all ${
+                            !inputText ? 'bg-stone-900 text-stone-600 border-stone-950' : 'bg-amber-600 hover:bg-amber-500 text-stone-950 border-amber-700 font-black'
+                          }`}
+                        >
+                          {isSending ? "AIR ON..." : "TRANSMIT"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* RX WORKSPACE: EMAIL-STYLE DETAILED INBOX */}
+                {activeMode === 'RX' && (
+                  <div className="flex flex-col gap-3 animate-fade-in">
+                    
+                    <div className="flex justify-between items-center text-[10px] font-mono text-stone-400 border-b border-stone-900 pb-2">
+                      <div className="flex items-center gap-1">
+                        <span>무선 대기 주파수: <strong>{channel}</strong></span>
+                      </div>
+                      <button onClick={() => setRxLanguageMode(!rxLanguageMode)} className="text-[9px] px-2 py-0.5 bg-stone-900 hover:bg-stone-850 rounded border border-stone-800 text-stone-300">
+                        번역 표준: {rxLanguageMode ? "한글 (KO)" : "ENGLISH"}
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 min-h-[170px]">
+                      
+                      <div className="md:col-span-5 bg-[#050606] rounded-lg border border-stone-900 p-2 overflow-y-auto max-h-[180px] flex flex-col gap-1.5">
+                        <div className="text-[8px] font-mono text-stone-500 font-bold uppercase tracking-wider mb-1 border-b border-stone-900 pb-1 flex justify-between">
+                          <span>📥 TELEGRAM LIST</span>
+                          <span>COUNT: {messages.length}</span>
+                        </div>
+
+                        {messages.length === 0 ? (
+                          <div className="text-center text-stone-600 italic py-8 text-[9px]">감청 내역이 없습니다.</div>
+                        ) : (
+                          [...messages].reverse().map((msg) => (
+                            <div 
+                              key={msg.id} 
+                              onClick={() => setSelectedMessage(msg)}
+                              className={`p-1.5 rounded cursor-pointer border text-left transition-all flex flex-col ${
+                                selectedMessage?.id === msg.id 
+                                  ? 'bg-amber-900/35 border-amber-500/70 text-amber-300' 
+                                  : 'bg-[#0a0c0e] hover:bg-stone-900 border-stone-900 text-stone-400'
+                              }`}
+                            >
+                              <div className="flex justify-between items-center text-[8px] mb-1 font-bold">
+                                <span className="truncate max-w-[80px]">
+                                  {msg.type === 'private' ? "🔒 " : "📡 "}
+                                  {msg.sender}
+                                </span>
+                                <span>{formatTimestamp(msg.createdAt)}</span>
+                              </div>
+                              <span className="text-[9px] truncate font-mono tracking-wider">{msg.morse}</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      <div className="md:col-span-7 bg-[#111316] rounded-lg border-2 border-stone-850 p-3 flex flex-col justify-between max-h-[180px] overflow-y-auto">
+                        {selectedMessage ? (
+                          <div className="flex flex-col h-full justify-between gap-2 text-left">
+                            
+                            <div>
+                              <div className="flex justify-between items-center border-b border-stone-800 pb-1 text-[8px] font-mono text-stone-400">
+                                <span>FROM: <strong className="text-amber-400">{selectedMessage.sender}</strong></span>
+                                <span>TIME: <strong>{formatTimestamp(selectedMessage.createdAt)}</strong></span>
+                              </div>
+
+                              <div className="mt-1.5">
+                                <span className="text-[8px] text-stone-500 uppercase font-mono block">Raw Morse Code</span>
+                                <p className="text-[10px] vintage-mono font-bold tracking-widest break-all text-amber-400/90 leading-relaxed bg-stone-950 p-1.5 rounded border border-stone-900 mt-0.5">
+                                  {selectedMessage.morse}
+                                </p>
+                              </div>
+
+                              <div className="mt-1.5">
+                                <span className="text-[8px] text-stone-500 uppercase font-mono block">Decoded Text</span>
+                                <p className="text-xs font-bold text-emerald-400 font-sans leading-snug mt-0.5">
+                                  {decodeMorseToText(selectedMessage.morse, rxLanguageMode)}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex gap-2 justify-end border-t border-stone-850 pt-2">
+                              <button 
+                                onClick={() => triggerReply(selectedMessage.sender)}
+                                className="px-2 py-1 bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 rounded text-[9px] font-mono font-bold flex items-center gap-1 transition-all"
+                              >
+                                <i className="lucide-reply text-[10px]"></i>
+                                REPLY (답장)
+                              </button>
+
+                              <button 
+                                onClick={() => playingMessageId === selectedMessage.id ? stopPlaying() : triggerPlayback(selectedMessage.morse, selectedMessage.id)}
+                                className={`px-3 py-1 rounded text-[9px] font-mono font-bold transition-all ${
+                                  playingMessageId === selectedMessage.id 
+                                    ? 'bg-rose-600 text-stone-950 font-black animate-pulse' 
+                                    : 'bg-amber-600 hover:bg-amber-500 text-stone-950 font-black'
+                                }`}
+                              >
+                                {playingMessageId === selectedMessage.id ? "⏹️ STOP" : "🔊 PLAY BEEP (비프)"}
+                              </button>
+                            </div>
+
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center h-full text-center py-6 text-stone-600">
+                            <i className="lucide-mail-open text-lg mb-1 animate-pulse"></i>
+                            <p className="text-[10px] font-sans">좌측 수신 서신 일지에서<br/>읽어올 무선을 선택하십시오.</p>
+                          </div>
+                        )}
+                      </div>
+
+                    </div>
+
+                  </div>
+                )}
+
+                {/* PRACTICE KEY WORKSPACE */}
+                {activeMode === 'KEY' && (
+                  <div className="flex flex-col gap-2 animate-fade-in">
+                    <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
+                      <div className="bg-[#050606] p-2 rounded border border-stone-950">
+                        <div className="text-[8px] text-stone-400 uppercase">Decoded Korean</div>
+                        <p className="font-bold text-emerald-500 mt-0.5 min-h-[22px] break-all">
+                          {decodeMorseToText(manualMorse, true) || "..."}
+                        </p>
+                      </div>
+                      <div className="bg-[#050606] p-2 rounded border border-stone-950">
+                        <div className="text-[8px] text-stone-400 uppercase">Decoded English</div>
+                        <p className="font-bold text-amber-500 mt-0.5 min-h-[22px] break-all">
+                          {decodeMorseToText(manualMorse, false) || "..."}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-1.5">
+                      <button onClick={() => setManualMorse(prev => prev.trim().slice(0, -1))} className="px-2.5 py-1 bg-stone-900 hover:bg-stone-850 border border-stone-800 text-[9px] font-mono text-stone-400 rounded">BACKSPACE</button>
+                      <button onClick={() => setManualMorse('')} className="px-2.5 py-1 bg-rose-950/20 hover:bg-rose-900/35 border border-rose-900/35 text-[9px] font-mono text-rose-400 rounded">RESET TAPE</button>
+                    </div>
+                  </div>
+                )}
+
+              </div>
+
+              {/* CLASSIC PIVOT BRASS KEY ASSEMBLY (ENLARGED & SATISFYING DESIGN) */}
+              <div className="border-2 border-stone-850 bg-gradient-to-b from-[#1c2026] to-[#121417] rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-5 shadow-lg">
+                
+                <div className="text-center sm:text-left select-none">
+                  <span className="text-[11px] font-black text-stone-300 uppercase tracking-widest font-mono block">
+                    MECHANICAL TELEGRAPH HAND KEYER
+                  </span>
+                  <span className="text-[10px] text-stone-200 mt-1 block leading-normal max-w-xs">
+                    더 넓어진 타건 영역에서 정교한 모스 부호를 발진해 보세요. (PC는 스페이스바 대응)
+                  </span>
+                </div>
+
+                {/* ENLARGED SKEUOMORPHIC LEVER MECHANISM */}
+                <div className="relative w-full max-w-sm sm:w-[320px] h-28 bg-[#1a1209] rounded-xl border-4 border-[#322312] flex items-center justify-center overflow-hidden select-none shadow-2xl animate-fade-in">
+                  
+                  {/* Wood finish block backing */}
+                  <div className="absolute inset-2 bg-[#2d1c0c] border border-[#1f1207] rounded flex flex-col justify-between p-1.5">
+                    <div className="text-[7px] font-mono text-amber-800 font-bold">CW HEAVY-DUTY UNIT-77</div>
+                  </div>
+
+                  {/* Larger Brass support post */}
+                  <div className="absolute left-8 w-5 h-8 rounded bg-yellow-600 shadow-md border-2 border-yellow-700"></div>
+
+                  {/* Enlarged Metallic lever handle armature */}
+                  <div className={`absolute left-10 w-48 h-6 flex items-center z-20 ${isTelegraphPressed ? 'lever-down' : 'lever-up'}`}>
+                    
+                    {/* Metal lever bar body */}
+                    <div className="w-32 h-2.5 bg-gradient-to-r from-stone-400 via-stone-300 to-stone-500 rounded-l shadow-md"></div>
+                    
+                    {/* Larger Bakelite black grip handle - Great Touch Target */}
+                    <div 
+                      onMouseDown={(e) => { e.preventDefault(); pressTelegraphKey(); }}
+                      onMouseUp={(e) => { e.preventDefault(); releaseTelegraphKey(); }}
+                      onMouseLeave={(e) => { e.preventDefault(); releaseTelegraphKey(); }}
+                      onTouchStart={(e) => { e.preventDefault(); pressTelegraphKey(); }}
+                      onTouchEnd={(e) => { e.preventDefault(); releaseTelegraphKey(); }}
+                      className={`w-12 h-12 rounded-full cursor-pointer transition-all border-4 flex items-center justify-center ${
+                        isTelegraphPressed 
+                          ? 'bg-stone-950 border-amber-500 scale-95 shadow-[inset_0_2px_4px_rgba(0,0,0,0.8)]' 
+                          : 'bg-stone-900 hover:bg-stone-850 border-stone-600 shadow-lg'
+                      }`}
+                    >
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-b from-transparent to-black/70 border border-stone-850 flex items-center justify-center">
+                        <div className="w-3 h-3 rounded-full bg-stone-950"></div>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Contact Pin bottom block */}
+                  <div className="absolute right-16 bottom-[32%] w-4 h-4 bg-yellow-600 rounded-full border-2 border-yellow-700 shadow-sm"></div>
+
+                </div>
+
+              </div>
+
+            </div>
+          )}
+
+          {/* SIMPLIFIED SYSTEM SPEC BAR WITH TRANSFERRED AI CODING RESEARCH INSTITUTE CREDITS */}
+          <div className="flex flex-col sm:flex-row justify-between items-center text-[8px] text-stone-600 font-mono tracking-wider px-1 gap-1">
+            <span>CW TELEGRAPHY SIMULATOR</span>
+            <span className="font-extrabold text-stone-500">DEVELOPED BY AI CODING RESEARCH INSTITUTE</span>
+            <span>RESTRICTED UNIT 144.150MHz</span>
+          </div>
+
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
